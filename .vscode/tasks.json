@@ -1,0 +1,42 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Zig Build Debug",
+            "type": "shell",
+            "command": "zig",
+            "args": 
+            [
+                "build",
+                "-Doptimize=Debug",
+                "-freference-trace",
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "group": {
+                "kind": "build"
+            }
+        },
+        {
+            "label": "Zig Build Test Debug",
+            "type": "shell",
+            "command": "zig",
+            "args": 
+            [
+                "test",
+                "-Doptimize=Debug",
+                "-freference-trace",
+                "-femit-bin=${workspaceFolder}/zig-out/bin/main_tests.exe",
+                "${workspaceFolder}/src/main_tests.zig"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        }
+    ]
+}
