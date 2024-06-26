@@ -1,1 +1,1 @@
-# Software Path Tracerr
+# Software Path Tracer
