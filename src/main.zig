@@ -1,5 +1,7 @@
 const std = @import("std");
 
+const cmd_ecs = @import("cmd_ecs/cmd_ecs.zig");
+
 pub fn main() !void {
     // Prints to stderr (it's a shortcut based on `std.io.getStdErr()`)
     std.debug.print("All your {s} are belong to us.\n", .{"codebase"});
@@ -14,6 +16,8 @@ pub fn main() !void {
     try stdout.print("Run `zig build test` to run the tests.\n", .{});
 
     try bw.flush(); // don't forget to flush!
+
+    cmd_ecs.say_something();
 }
 
 test "simple test" {

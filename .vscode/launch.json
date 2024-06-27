@@ -5,7 +5,7 @@
             "name": "Zig Debug Tests",
             "type": "cppvsdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/zig-out/bin/main_tests.exe",
+            "program": "${workspaceFolder}/zig-out/bin/tests.exe",
             "args": [],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/zig-out/bin",
