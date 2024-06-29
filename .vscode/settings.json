@@ -9,5 +9,11 @@
                 "C:/Program Files/PowerShell/7/pwsh.exe"
             ]
         }
-    }
+    },
+    "zig.formattingProvider": "off",
+    "zig.initialSetupDone": true,
+    "zig.zls.enableAutofix": true,
+    "zig.zls.enableBuildOnSave": true,
+    "zig.zls.highlightGlobalVarDeclarations": true,
+    "zig.zls.inlayHintsHideRedundantParamNamesLastToken": false
 }

@@ -3,7 +3,7 @@ const testing = std.testing;
 
 comptime 
 {
-    _ = @import("cmd_ecs/tests.zig");
+    _ = @import("../cmd_ecs/tests.zig");
 }
 
 const log = @import("common/common.zig").logger;
