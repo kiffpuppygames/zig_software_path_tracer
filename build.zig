@@ -17,14 +17,12 @@ pub fn build(b: *std.Build) void
     //     .optimize = optimize});
     // cmd_ecs.addImport("common", common);
    
-    // const main_unit_tests = b.addTest(.{
-    //     .root_source_file = b.path("src/main_tests.zig"),
-    //     .target = target,
-    //     .optimize = optimize,
-    // });
-    // main_unit_tests.root_module.addImport("common", common);
-    // main_unit_tests.root_module.addImport("cmd_ecs", cmd_ecs);
-    // const run_main_unit_tests = b.addRunArtifact(main_unit_tests);
+    const unit_tests = b.addTest(.{
+        .root_source_file = b.path("src/tests.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const run_unit_tests = b.addRunArtifact(unit_tests);
 
     // var cmd_ecs_tests = b.addTest(.{
     //     .root_source_file = b.path("src/cmd_ecs/tests.zig"),
@@ -56,7 +54,7 @@ pub fn build(b: *std.Build) void
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
 
-    //var test_step = b.step("test", "Run unit tests");
-    //test_step.dependOn(&run_main_unit_tests.step);
+    var test_step = b.step("test", "Run unit tests");
+    test_step.dependOn(&run_unit_tests.step);
     //test_step.dependOn(&run_cmd_ecs_tests.step);
 }

@@ -4,108 +4,71 @@ const common = @import("../common/common.zig");
 
 const logger = common.logger;
 
-const System = *const fn() void;
-
 pub const World = struct 
-{    
-    var instance: ?World = null;
-    var quit: bool = false;
-    var arena: std.heap.ArenaAllocator = undefined;
-
-    entities: std.ArrayList(Entity),
-    systems: std.ArrayList(System),
-    component_register: std.StringArrayHashMap(std.AutoArrayHashMap(u64, type)),
+{
+    quit: bool,    
+    alloc: std.mem.Allocator,
+    entities: std.AutoArrayHashMap(u64, Entity),
+    systems: std.ArrayList(*const fn() void),
+    update_timer: std.time.Timer,
+    delta_time_ns: u64,
+    schedule: *const fn() void,
 
     // Private constructor
-    fn init() void 
+    pub fn init(alloc: std.mem.Allocator) World 
     {
-        var new_arena: std.heap.ArenaAllocator = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+        logger.info("Initializing ECS", .{});
 
-        instance = World {
-            .entities = std.ArrayList(Entity).init(new_arena.allocator()),
-            .systems = std.ArrayList(System).init(new_arena.allocator()),
-            .component_register = std.StringArrayHashMap(std.AutoArrayHashMap( u64, type)).init(new_arena.allocator())
+        return World {
+            .quit = false,
+            .alloc = alloc,
+            .entities = std.AutoArrayHashMap(u64, Entity).init(alloc),
+            .systems = std.ArrayList(*const fn() void).init(alloc),
+            .update_timer = undefined,
+            .delta_time_ns = 0,
+            .schedule = undefined,
         };
-        World.arena = new_arena;
-    }
-
-    // Public accessor function
-    pub fn get_instance() *World 
-    {
-        if (instance == null) 
-        {
-            World.init();
-        }
-        return &instance.?;
     }
 
     pub fn run(self: *World) void
     {
-        while(!quit)
+        var timer = std.time.Timer.start() catch unreachable;
+        while(!self.quit)
         {
-            instance.?.update();
+            self.update();
+            self.delta_time_ns = timer.lap();            
         }
-
-        logger.info("Cleaning up", {});
 
         self.entities.deinit();
         self.systems.deinit();
-        self.component_register.deinit();
-
-        logger.info("World has exited", {});
-
-        self.arena.deinit();
     }
 
-    pub fn exit() void
+    pub fn exit(self: *World) void
     {
-        quit = true;
+        self.quit = true;
     }
 
     fn update(self: *World) void 
     {
-        for (self.systems.items) |system| 
-        {
-            system();
-        }
+        self.schedule();
     }
 
-    pub fn add_component(self: *World, component: anytype) void 
-    { 
-        if (!@hasField(@TypeOf(component), "id")) 
-        {
-            @compileError("add_component: Component type must have an 'id' field");
-        }
-
-        var component_map = self.component_register.get(@typeName(component));
-        component_map.append(component.id, component) catch unreachable;
-    }
-
-    pub fn get_component(self: *World, id: u64, T: type) T 
+    pub fn register_system(self: *World, system:*const fn() void) void 
     {
-        return self.component_register.get(@typeName(T)).?.get(id).?;
-    }
-
-    pub fn register_system(self: *World, system:System) void 
-    {
+        logger.info("Registering system", .{});
         self.systems.append(system) catch unreachable;            
     }
 
-    pub fn register_component(self: *World, component_type: type) void 
+    pub fn set_schedule(self: *World, schedule_runner:*const fn() void) void 
     {
-        if (!@hasField(component_type, "id")) 
-        {
-            @compileError("register_component: Component type must have an 'id' field");
-        }
-
-        self.component_register.put(@typeName(component_type), std.ArrayList(type).init(World.arena.allocator())) catch unreachable;
+        self.schedule = schedule_runner; 
     }
 };
 
 pub const Entity = struct 
 {
-    id: u32,
-    components: std.AutoArrayHashMap(u64, type),
+    id: u64,
+    components: std.AutoArrayHashMap(u64, *anyopaque)
 };
 
 pub fn say_something() void 
