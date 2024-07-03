@@ -7,7 +7,7 @@ const Entity = cmd_ecs.entity.Entity;
 
 pub const World = struct {
     quit: bool,
-    alloc: std.mem.Allocator,
+    arena: *std.heap.ArenaAllocator,
     entities: std.AutoArrayHashMap(u64, Entity),
     systems: std.ArrayList(*const fn () void),
     update_timer: std.time.Timer,
@@ -15,12 +15,12 @@ pub const World = struct {
     start_up_schedule: *const fn () void,
     update_schedule: *const fn () void,
 
-    pub fn init(alloc: std.mem.Allocator) World {
+    pub fn init(alloc: *std.heap.ArenaAllocator) World {
         return World{
             .quit = false,
-            .alloc = alloc,
-            .entities = std.AutoArrayHashMap(u64, Entity).init(alloc),
-            .systems = std.ArrayList(*const fn () void).init(alloc),
+            .arena = alloc,
+            .entities = std.AutoArrayHashMap(u64, Entity).init(alloc.allocator()),
+            .systems = std.ArrayList(*const fn () void).init(alloc.allocator()),
             .update_timer = undefined,
             .delta_time_ns = 0,
             .start_up_schedule = undefined,
@@ -56,5 +56,10 @@ pub const World = struct {
 
     pub fn set_start_up_schedule(self: *World, schedule: *const fn () void) void {
         self.start_up_schedule = schedule;
+    }
+
+    pub fn shutdown(self: *World) void {
+        self.entities.deinit();
+        self.systems.deinit();
     }
 };

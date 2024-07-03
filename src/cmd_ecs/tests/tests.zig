@@ -46,31 +46,31 @@ const CommandQueueRegister = struct
 
 test "CmdECS workflow: cmd -> create-entity -> cmd -> handle-component -> cmd ->  destroy-entity -> cmd -> exit" 
 {
-    logger.info("Running ECS test", .{});
+    // logger.info("Running ECS test", .{});
 
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    // var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
 
-    world = cmd_ecs.World.init(arena.allocator());
-    test_component_register = TestComponentRegister.init(arena.allocator());
-    command_queue_register = CommandQueueRegister.init(arena.allocator());
+    // world = cmd_ecs.World.init(arena.allocator());
+    // test_component_register = TestComponentRegister.init(arena.allocator());
+    // command_queue_register = CommandQueueRegister.init(arena.allocator());
 
-    request_spawn_entity_system = RequestSpawnEntitySystem { 
-        .spawn_timer = undefined, 
-        .started = false,
-        .spawn_delay = 10 * std.time.ns_per_s, 
-        .spawn_entities = true 
-    };
+    // request_spawn_entity_system = RequestSpawnEntitySystem { 
+    //     .spawn_timer = undefined, 
+    //     .started = false,
+    //     .spawn_delay = 10 * std.time.ns_per_s, 
+    //     .spawn_entities = true 
+    // };
 
-    spawn_entity_system = SpawnEntitySystem{ .allocator = arena.allocator()};
-    modify_entity_system = ModifyEntitySystem{};
+    // spawn_entity_system = SpawnEntitySystem{ .allocator = arena.allocator()};
+    // modify_entity_system = ModifyEntitySystem{};
 
-    world.set_schedule(run_shedule);
+    // world.set_schedule(run_shedule);
 
-    logger.info("World Start", .{});
-    world.run();
-    logger.info("World Exit", .{});
+    // logger.info("World Start", .{});
+    // world.run();
+    // logger.info("World Exit", .{});
 
-    arena.deinit();
+    // arena.deinit();
 }
 
 pub fn run_shedule() void

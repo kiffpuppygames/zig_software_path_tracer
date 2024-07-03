@@ -10,10 +10,12 @@
             ]
         }
     },
+    "zig.buildOnSave": true,
     "zig.formattingProvider": "off",
     "zig.initialSetupDone": true,
+    "zig.path": "zig",
     "zig.zls.enableAutofix": true,
     "zig.zls.enableBuildOnSave": true,
-    "zig.zls.highlightGlobalVarDeclarations": true,
-    "zig.zls.inlayHintsHideRedundantParamNamesLastToken": false
+    "zig.zls.inlayHintsHideRedundantParamNames": true,
+    "zig.zls.path": "D:\\KiffPuppyGames\\zls\\zig-out\\bin\\zls.exe"
 }

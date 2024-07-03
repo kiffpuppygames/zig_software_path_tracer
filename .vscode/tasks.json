@@ -16,7 +16,8 @@
             },
             "group": {
                 "kind": "build"
-            }
+            },
+            "problemMatcher": [ "$zig" ]
         },
         {
             "label": "Zig Build Test Debug",
@@ -24,11 +25,8 @@
             "command": "zig",
             "args": 
             [
-                "test",
-                "-Doptimize=Debug",
-                "-freference-trace",
-                "-femit-bin=${workspaceFolder}/zig-out/bin/tests.exe",
-                "${workspaceFolder}/src/tests.zig"
+                "build",
+                "test"
             ],
             "options": {
                 "cwd": "${workspaceFolder}"
