@@ -29,6 +29,7 @@ pub const PathTracer = struct {
     id_provider: cmd_ecs.id_provider.IdProvider = cmd_ecs.id_provider.IdProvider.init(),
     render_pass_group: renderer_system.RenderPassGroup = undefined,
     image_transfer_pipeline: image_transfer_pipeline.ImageTransferPipeline = undefined,
+    ready_to_render: bool = false,
 
     create_image_transfer_pipeline_cmd_q: std.ArrayList(image_transfer_pipeline.CmdCreateImageTransferPipeline),   
 
@@ -52,6 +53,7 @@ pub const PathTracer = struct {
             .create_image_transfer_pipeline_cmd_q = std.ArrayList(image_transfer_pipeline.CmdCreateImageTransferPipeline).init(arena.allocator()),
             .render_pass_group = undefined,
             .image_transfer_pipeline = undefined,
+            .ready_to_render = false,
         };
     }
    
@@ -121,7 +123,16 @@ pub const PathTracer = struct {
         PathTracer.instance().renderer.handle_create_logical_device_cmds();    
         PathTracer.instance().renderer.handle_create_render_target_cmds();  
         PathTracer.instance().handle_create_image_transfer_pipeline_cmds();
-        PathTracer.instance().renderer.draw_frame(PathTracer.instance().image_transfer_pipeline.command_buffer, PathTracer.instance().image_transfer_pipeline.in_flight_fence, PathTracer.instance().image_transfer_pipeline.image_available_semaphore, PathTracer.instance().image_transfer_pipeline.render_finished_semaphore);  
+
+        if (PathTracer.instance().ready_to_render) {
+            PathTracer.instance().renderer.draw_frame(
+                PathTracer.instance().image_transfer_pipeline.command_buffer,                
+                &PathTracer.instance().render_pass_group,
+                PathTracer.instance().image_transfer_pipeline.graphics_pipeline, 
+                &PathTracer.instance().image_transfer_pipeline.sync_items, 
+                image_transfer_pipeline.record_cmd_buff_func
+            );
+        }
     }
 
     pub fn handle_input_callback(glfw_window: glfw.Window, key: glfw.Key, scan_code: i32, action: glfw.Action, mods: glfw.Mods) void 
@@ -185,10 +196,12 @@ pub const PathTracer = struct {
                 self.arena, 
                 800, 
                 600, 
-                &self.renderer.logical_device.?.device, 
+                &self.renderer, 
                 &self.render_pass_group,
-                self.renderer.logical_device.?.graphics_queue
+                self.renderer.logical_device.?.queue_index
             );
+
+            self.ready_to_render = true;
             logger.debug("Image Transfer Pipeline Created", .{});
         }
         self.create_image_transfer_pipeline_cmd_q.clearRetainingCapacity();    

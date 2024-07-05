@@ -50,6 +50,8 @@ const vertices = [_]Vertex{
     .{ .pos = .{ -0.5, 0.5 }, .color = .{ 0, 0, 1 } },
 };
 
+pub const record_cmd_buff_func: *const renderer_system.RecordCmdBuffFunc = &ImageTransferPipeline.record_command_buffer;
+
 pub const ImageTransferPipeline = struct 
 {
     allocator: *std.heap.ArenaAllocator = undefined,
@@ -61,12 +63,12 @@ pub const ImageTransferPipeline = struct
     graphics_pipeline: vk.Pipeline = undefined,
     command_pool: vk.CommandPool = undefined,
     command_buffer: vk.CommandBuffer = undefined,
-    image_available_semaphore: vk.Semaphore = .null_handle,
-    render_finished_semaphore: vk.Semaphore = .null_handle,
-    in_flight_fence: vk.Fence = .null_handle,
+    sync_items: renderer_system.SyncItems = undefined,    
 
-    pub fn init(alloc: *std.heap.ArenaAllocator, width: u32, height: u32, device: *renderer_system.Device, render_pass_group: *renderer_system.RenderPassGroup, graphics_queue: u32) ImageTransferPipeline 
+    pub fn init(alloc: *std.heap.ArenaAllocator, width: u32, height: u32, renderer: *renderer_system.Renderer, render_pass_group: *renderer_system.RenderPassGroup, graphics_queue: u32) ImageTransferPipeline 
     {
+        const device = &renderer.logical_device.?.device;
+
         const pixels = std.ArrayList(Pixel).initCapacity(alloc.allocator(), width * height) catch unreachable;
 
         const vert_shader_code align(4) = @embedFile("../shaders/vert.spv").*;
@@ -96,21 +98,23 @@ pub const ImageTransferPipeline = struct
 
         const dynamic_states = [_]vk.DynamicState{
             .viewport,
-            .scissor,
+            .scissor
         };
         const dynamic_state_ceate_info = vk.PipelineDynamicStateCreateInfo {
             .dynamic_state_count = 2,
             .p_dynamic_states = &dynamic_states,
         };
 
-        const vertex_input_info = vk.PipelineVertexInputStateCreateInfo {
+        const vertex_input_info = vk.PipelineVertexInputStateCreateInfo{
+            .flags = .{ },
             .vertex_binding_description_count = 0,
-            .p_vertex_binding_descriptions = null,
+            .p_vertex_binding_descriptions = undefined,
             .vertex_attribute_description_count = 0,
-            .p_vertex_attribute_descriptions = null,
+            .p_vertex_attribute_descriptions = undefined,
         };
                 
-        const input_assembly = vk.PipelineInputAssemblyStateCreateInfo {
+        const input_assembly = vk.PipelineInputAssemblyStateCreateInfo{
+            .flags = .{},
             .topology = .triangle_list,
             .primitive_restart_enable = vk.FALSE,
         };
@@ -214,7 +218,7 @@ pub const ImageTransferPipeline = struct
 
         const command_pool_create_info = vk.CommandPoolCreateInfo {
             .queue_family_index = graphics_queue,
-            .flags = .{},
+            .flags = .{ .reset_command_buffer_bit = true},
         };
 
         const command_pool = device.createCommandPool(&command_pool_create_info, null) catch unreachable;
@@ -229,11 +233,13 @@ pub const ImageTransferPipeline = struct
         var command_buffers = [_]vk.CommandBuffer{ command_buffer };
         _ = device.allocateCommandBuffers(&command_buffer_allocate_info, &command_buffers) catch unreachable;  
 
-        record_command_buffer(command_buffers[0], device, render_pass_group, width, height, pipelines[0]);
+        //record_command_buffer(renderer, command_buffers[0], render_pass_group, pipelines[0], 0);
 
-        const image_available_semaphore = device.createSemaphore( &.{ .flags = .{} }, null) catch unreachable;
-        const render_finished_semaphore = device.createSemaphore( &.{ .flags = .{} }, null) catch unreachable;
-        const in_flight_fence = device.createFence( &.{ .flags = .{ .signaled_bit = true } }, null) catch unreachable;
+        const sync_items = renderer_system.SyncItems{
+            .image_available_semaphore = device.createSemaphore( &.{ .flags = .{} }, null) catch unreachable,
+            .render_finished_semaphore = device.createSemaphore( &.{ .flags = .{} }, null) catch unreachable,
+            .in_flight_fence = device.createFence( &.{ .flags = .{ .signaled_bit = true } }, null) catch unreachable
+        };
 
         return ImageTransferPipeline{
             .allocator = alloc,
@@ -245,14 +251,16 @@ pub const ImageTransferPipeline = struct
             .graphics_pipeline = pipelines[0],
             .command_pool = command_pool,
             .command_buffer = command_buffers[0],
-            .image_available_semaphore = image_available_semaphore,
-            .render_finished_semaphore = render_finished_semaphore,
-            .in_flight_fence = in_flight_fence,
+            .sync_items = sync_items
         };
     }
 
-    fn record_command_buffer(command_buffer: vk.CommandBuffer, device: *renderer_system.Device, render_pass_group: *renderer_system.RenderPassGroup, width: u32, height: u32, pipeline: vk.Pipeline) void 
+    fn record_command_buffer(renderer: *renderer_system.Renderer, command_buffer: vk.CommandBuffer, render_pass_group: *renderer_system.RenderPassGroup, pipeline: vk.Pipeline, image_index: u32) void 
     {        
+        const device = &renderer.logical_device.?.device;
+        const width = renderer.render_target.?.extent.width;
+        const height = renderer.render_target.?.extent.height;
+
         const command_buffer_begin_info = vk.CommandBufferBeginInfo {
             .flags = .{},
             .p_inheritance_info = null,
@@ -260,15 +268,22 @@ pub const ImageTransferPipeline = struct
 
         device.beginCommandBuffer(command_buffer, &command_buffer_begin_info) catch unreachable;
 
+        const clear_values = [_]vk.ClearValue{ 
+                .{
+                    .color = vk.ClearColorValue{ .float_32 = [4]f32{ 1.0, 1.0, 1.0, 1.0 }
+                }
+            }
+            };
+
         const render_pass_begin_info = vk.RenderPassBeginInfo {
             .render_pass = render_pass_group.render_pass,
-            .framebuffer = render_pass_group.framebuffers.items[0],
+            .framebuffer = render_pass_group.framebuffers.items[image_index],
             .render_area = .{
                 .offset = .{ .x = 0, .y = 0 },
                 .extent = .{ .width = @intCast(width), .height = @intCast(height) },
             },
             .clear_value_count = 0,
-            .p_clear_values = null,
+            .p_clear_values = &clear_values,
         };
         
         device.cmdBeginRenderPass(command_buffer, &render_pass_begin_info, .@"inline");

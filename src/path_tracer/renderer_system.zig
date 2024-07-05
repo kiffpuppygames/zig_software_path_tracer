@@ -4,8 +4,6 @@ const glfw = @import("mach-glfw");
 
 const logger = @import("../common/logger.zig");
 
-const renderer_system = @import("renderer_system.zig");
-
 const api = vk.ApiInfo{
     .base_commands = .{
         .createInstance = true,
@@ -19,6 +17,7 @@ const api = vk.ApiInfo{
         .destroySurfaceKHR = true,   
         .getDeviceProcAddr = true,     
         .createDevice = true,
+        .getPhysicalDeviceSurfaceCapabilitiesKHR = true,
     },
     .device_commands = .{
         .destroyDevice = true,
@@ -54,6 +53,10 @@ const api = vk.ApiInfo{
         .resetFences = true,
         .createSemaphore = true,
         .acquireNextImageKHR = true,
+        .resetCommandBuffer = true,
+        .queueSubmit = true,
+        .queuePresentKHR = true,
+        
         
 
         .createBuffer = true,
@@ -71,6 +74,8 @@ const DeviceDispatch = vk.DeviceWrapper(apis);
 
 pub const Instance = vk.InstanceProxy(apis);
 pub const Device = vk.DeviceProxy(apis);
+
+pub const RecordCmdBuffFunc = fn (*Renderer, vk.CommandBuffer, *RenderPassGroup, vk.Pipeline, u32) void;
 
 pub const CmdInitRenderer = struct {
     id: u64
@@ -92,10 +97,24 @@ pub const RendererContext = struct {
     physical_devices: std.ArrayList(vk.PhysicalDevice),
 };
 
+pub const SyncItems = struct {
+    image_available_semaphore: vk.Semaphore = undefined,
+    render_finished_semaphore: vk.Semaphore = undefined,
+    in_flight_fence: vk.Fence = undefined,
+};
+
 pub const LogicalDevice = struct {
     device: Device,
     physical_device: vk.PhysicalDevice,
-    graphics_queue: u8,
+    queue_index: u8,
+    graphics_queue: vk.Queue,
+    present_queue: vk.Queue,
+};
+
+pub const SwapChainSupportDetails = struct {
+    capabilities: vk.SurfaceCapabilitiesKHR = undefined,
+    formats: ?[]vk.SurfaceFormatKHR = null,
+    present_modes: ?[]vk.PresentModeKHR = null,
 };
 
 const RenderTarget = struct {
@@ -111,7 +130,7 @@ pub const RenderPassGroup = struct {
     render_pass: vk.RenderPass,
     framebuffers: std.ArrayList(vk.Framebuffer),
 
-    pub fn init(allocator: std.mem.Allocator, device: *renderer_system.Device, format: vk.Format, views: *std.ArrayList(vk.ImageView)) RenderPassGroup
+    pub fn init(allocator: std.mem.Allocator, device: *Device, format: vk.Format, views: *std.ArrayList(vk.ImageView)) RenderPassGroup
     {
         const color_attachment = [_]vk.AttachmentDescription{.{
             .flags = .{},
@@ -253,37 +272,43 @@ pub const Renderer = struct {
         };
     }
 
-    pub fn draw_frame(self: *Renderer, command_buffer: vk.CommandBuffer,  inflight_fence: vk.Fence, image_available_semaphore: vk.Semaphore, render_finished_semaphore: vk.Semaphore) void
+    pub fn draw_frame(
+        self: *Renderer,
+        command_buffer: vk.CommandBuffer,
+        render_pass_group: *RenderPassGroup,
+        pipeline: vk.Pipeline, 
+        sync_items: *SyncItems,
+        record_command_buffer: *const RecordCmdBuffFunc) void
     {
-        _ = render_finished_semaphore; // autofix
-        _ = self.logical_device.?.device.waitForFences(1, @ptrCast(&inflight_fence), vk.TRUE, std.math.maxInt(u64)) catch unreachable;
-        self.logical_device.?.device.resetFences(1, @ptrCast(&inflight_fence)) catch unreachable;
+        _ = self.logical_device.?.device.waitForFences(1, @ptrCast(&sync_items.in_flight_fence), vk.TRUE, std.math.maxInt(u64)) catch unreachable;
+        self.logical_device.?.device.resetFences(1, @ptrCast(&sync_items.in_flight_fence)) catch unreachable;
 
-        const result = self.logical_device.?.device.acquireNextImageKHR(self.render_target.?.swapchain, std.math.maxInt(u64), image_available_semaphore, .null_handle) catch unreachable;
+        const result = self.logical_device.?.device.acquireNextImageKHR(self.render_target.?.swapchain, std.math.maxInt(u64), sync_items.image_available_semaphore, .null_handle) catch unreachable;
 
         self.logical_device.?.device.resetCommandBuffer(command_buffer, .{}) catch unreachable;
-        self.logical_device.?.device.recordCommandBuffer(command_buffer, result.image_index) catch unreachable;
+        record_command_buffer(self, command_buffer, render_pass_group, pipeline, result.image_index);
 
-        const wait_semaphores = [_]vk.Semaphore{self.image_available_semaphore};
+        const wait_semaphores = [_]vk.Semaphore{sync_items.image_available_semaphore};
         const wait_stages = [_]vk.PipelineStageFlags{.{ .color_attachment_output_bit = true }};
-        const signal_semaphores = [_]vk.Semaphore{self.render_finished_semaphore};
+        const signal_semaphores = [_]vk.Semaphore{sync_items.render_finished_semaphore};
 
         const submit_info = vk.SubmitInfo{
             .wait_semaphore_count = wait_semaphores.len,
             .p_wait_semaphores = &wait_semaphores,
             .p_wait_dst_stage_mask = &wait_stages,
             .command_buffer_count = 1,
-            .p_command_buffers = @ptrCast(&self.command_buffer),
+            .p_command_buffers = @ptrCast(&command_buffer),
             .signal_semaphore_count = signal_semaphores.len,
             .p_signal_semaphores = &signal_semaphores,
         };
-        _ = try self.vkd.queueSubmit(self.graphics_queue, 1, &[_]vk.SubmitInfo{submit_info}, self.in_flight_fence) catch unreachable;
+        _ = self.logical_device.?.device.queueSubmit(self.logical_device.?.graphics_queue, 1, &[_]vk.SubmitInfo{submit_info}, sync_items.in_flight_fence) catch unreachable;
 
-        _ = try self.vkd.queuePresentKHR(self.present_queue, &.{
+        const swapchains = [_]vk.SwapchainKHR{self.render_target.?.swapchain};
+        _ = self.logical_device.?.device.queuePresentKHR(self.logical_device.?.present_queue, &.{
             .wait_semaphore_count = signal_semaphores.len,
             .p_wait_semaphores = &signal_semaphores,
             .swapchain_count = 1,
-            .p_swapchains = @ptrCast(&self.render_target.?.swap_chain),
+            .p_swapchains = &swapchains,
             .p_image_indices = @ptrCast(&result.image_index),
             .p_results = null,
         }) catch unreachable;
@@ -292,33 +317,39 @@ pub const Renderer = struct {
     pub fn handle_create_logical_device_cmds(self: *Renderer) void
     {
         for (self.create_logical_device_cmd_queue.items) |_| 
-        {
-            const physical_device = self.context.?.physical_devices.items[0];
-            const graphics_queue: u32 = 0;
+        {            
+            const queue_priority = [_]f32{1};
 
-            const queue_priorities = [_]f32{1.0};
-            const queue_create_info = vk.DeviceQueueCreateInfo {
-                .queue_family_index = graphics_queue,
-                .queue_count = 1,
-                .p_queue_priorities = &queue_priorities
+            var queue_create_info = [_]vk.DeviceQueueCreateInfo{
+                .{
+                    .flags = .{},
+                    .queue_family_index = 0,
+                    .queue_count = 1,
+                    .p_queue_priorities = &queue_priority,
+                },
+                .{
+                    .flags = .{},
+                    .queue_family_index = 0,
+                    .queue_count = 1,
+                    .p_queue_priorities = &queue_priority,
+                },
             };
 
             var device_extensions = std.ArrayList([*:0]const u8).init(self.context.?.arena.allocator());
             device_extensions.append("VK_KHR_swapchain") catch unreachable;
 
-            const device_features = vk.PhysicalDeviceFeatures{};
-            _ = device_features; // autofix
-
-            const vk_queue_create_infos = [_]vk.DeviceQueueCreateInfo{ queue_create_info };
-            const device_create_info = vk.DeviceCreateInfo {
-                .queue_create_info_count = 1,
-                .p_queue_create_infos = &vk_queue_create_infos,
+            var create_info = vk.DeviceCreateInfo{
+                .flags = .{},
+                .queue_create_info_count = queue_create_info.len,
+                .p_queue_create_infos = &queue_create_info,
+                .enabled_layer_count = 0,
+                .pp_enabled_layer_names = undefined,
                 .enabled_extension_count = @intCast(device_extensions.items.len),
                 .pp_enabled_extension_names = device_extensions.items.ptr,
-                .enabled_layer_count = 0,
+                .p_enabled_features = null,
             };
 
-            const _device = self.context.?.instance.createDevice(physical_device, &device_create_info, null) catch unreachable;
+            const _device = self.context.?.instance.createDevice(self.context.?.physical_devices.items[0], &create_info, null) catch unreachable;
 
             const vkd = self.context.?.arena.allocator().create(DeviceDispatch) catch unreachable;
             vkd.* = DeviceDispatch.load(_device, self.context.?.instance.wrapper.dispatch.vkGetDeviceProcAddr) catch unreachable;
@@ -326,93 +357,122 @@ pub const Renderer = struct {
 
             self.logical_device = LogicalDevice {
                 .device = device,
-                .physical_device = physical_device,
-                .graphics_queue = graphics_queue,
+                .physical_device = self.context.?.physical_devices.items[0],
+                .queue_index = 0,
+                .graphics_queue = device.getDeviceQueue(0, 0),
+                .present_queue = device.getDeviceQueue(0, 0),
             };
         }
         self.create_logical_device_cmd_queue.clearRetainingCapacity();    
     }
 
+    fn choose_swap_extent(self: *Renderer, capabilities: vk.SurfaceCapabilitiesKHR, window: glfw.Window) !vk.Extent2D {
+        _ = self; // autofix
+        if (capabilities.current_extent.width != 0xFFFF_FFFF) {
+            return capabilities.current_extent;
+        } else {
+            const window_size = try window.?.getFramebufferSize();
+
+            return vk.Extent2D{
+                .width = std.math.clamp(window_size.width, capabilities.min_image_extent.width, capabilities.max_image_extent.width),
+                .height = std.math.clamp(window_size.height, capabilities.min_image_extent.height, capabilities.max_image_extent.height),
+            };
+        }
+    }
+
+    fn query_swapchain_support(self: *Renderer, device: vk.PhysicalDevice, surface: vk.SurfaceKHR) SwapChainSupportDetails {
+        var details: SwapChainSupportDetails = SwapChainSupportDetails{};
+
+        details.capabilities = self.context.?.instance.getPhysicalDeviceSurfaceCapabilitiesKHR(device, surface) catch unreachable;
+
+        var count: u32 = 0;
+        _ = self.context.?.instance.getPhysicalDeviceSurfaceFormatsKHR(device, surface, &count, null) catch unreachable;
+        const formats: ?[]vk.SurfaceFormatKHR = self.context.?.arena.allocator().alloc(vk.SurfaceFormatKHR, count) catch unreachable;
+        _ = self.context.?.instance.getPhysicalDeviceSurfaceFormatsKHR(device, surface, &count, formats.?.ptr) catch unreachable;
+        details.formats = formats.?;
+
+        const present_mode_result = self.context.?.instance.getPhysicalDeviceSurfacePresentModesKHR(device) catch unreachable;
+        details.present_modes = present_mode_result.?;
+
+        return details;
+    }
+
+    fn create_image_views(self: *Renderer) []vk.ImageView {
+        var swap_chain_image_views = try self.context.?.arena.allocator().alloc(vk.ImageView, self.swap_chain_images.?.len);
+
+        for (self.swap_chain_images.?, 0..) |image, i| {
+            swap_chain_image_views.?[i] = try self.logical_device.?.device.createImageView(self.device, &.{
+                .flags = .{},
+                .image = image,
+                .view_type = .@"2d",
+                .format = self.swap_chain_image_format,
+                .components = .{ .r = .identity, .g = .identity, .b = .identity, .a = .identity },
+                .subresource_range = .{
+                    .aspect_mask = .{ .color_bit = true },
+                    .base_mip_level = 0,
+                    .level_count = 1,
+                    .base_array_layer = 0,
+                    .layer_count = 1,
+                },
+            }, null);
+        }
+
+        return swap_chain_image_views;
+    }
+
     pub fn handle_create_render_target_cmds(self: *Renderer) void
     {
         for (self.create_render_target_cmd_queue.items) |cmd| 
-        {            
-            var surface: vk.SurfaceKHR = undefined;
+        { 
+            var surface: vk.SurfaceKHR = .null_handle;
             _ = glfw.createWindowSurface(self.context.?.instance.handle, cmd.window.*, null, &surface);
 
-            var image_count: u32 = 3; 
-            const swap_chain_create_info = vk.SwapchainCreateInfoKHR {
-                .surface = surface,
+            const swap_chain_support = self.query_swapchain_support(self.logical_device.?.physical_device, surface);
+
+            const surface_format: vk.SurfaceFormatKHR = vk.SurfaceFormatKHR{ .format = vk.Format.r8g8b8a8_unorm, .color_space = vk.ColorSpaceKHR.srgb_nonlinear_khr };
+            const present_mode: vk.PresentModeKHR = vk.PresentModeKHR.fifo_khr;
+            const extent: vk.Extent2D = try self.choose_swap_extent(swap_chain_support.capabilities, surface);
+
+            var image_count = swap_chain_support.capabilities.min_image_count + 1;
+            if (swap_chain_support.capabilities.max_image_count > 0) {
+                image_count = std.math.min(image_count, swap_chain_support.capabilities.max_image_count);
+            }
+
+            const indices = try self.findQueueFamilies(self.physical_device);
+            const queue_family_indices = [_]u32{ indices.graphics_family.?, indices.present_family.? };
+            const sharing_mode: vk.SharingMode = if (indices.graphics_family.? != indices.present_family.?)
+                .concurrent
+            else
+                .exclusive;
+
+            const swapchain = self.vkd.createSwapchainKHR(self.device, &.{
+                .flags = .{},
+                .surface = self.surface,
                 .min_image_count = image_count,
-                .image_format = vk.Format.r8g8b8a8_unorm,
-                .image_color_space = vk.ColorSpaceKHR.colorspace_srgb_nonlinear_khr,
-                .image_extent = vk.Extent2D{ .width = 800, .height = 600 },
+                .image_format = surface_format.format,
+                .image_color_space = surface_format.color_space,
+                .image_extent = extent,
                 .image_array_layers = 1,
                 .image_usage = .{ .color_attachment_bit = true },
-                .image_sharing_mode = vk.SharingMode.exclusive,
-                .pre_transform = .{ .identity_bit_khr = true },
+                .image_sharing_mode = sharing_mode,
+                .queue_family_index_count = queue_family_indices.len,
+                .p_queue_family_indices = &queue_family_indices,
+                .pre_transform = swap_chain_support.capabilities.current_transform,
                 .composite_alpha = .{ .opaque_bit_khr = true },
-                .present_mode = vk.PresentModeKHR.fifo_khr,
+                .present_mode = present_mode,
                 .clipped = vk.TRUE,
-                .old_swapchain = vk.SwapchainKHR.null_handle,
-            };
+                .old_swapchain = .null_handle,
+            }, null) catch unreachable;
 
-            const swapchain = self.logical_device.?.device.createSwapchainKHR(&swap_chain_create_info, null) catch |err| {
-                logger.err("Failed to create swapchain: {?}", .{err});
-                std.process.exit(1);
-            };
-
-            const swapchain_images = self.context.?.arena.allocator().alloc(vk.Image, image_count) catch unreachable;
-            const res = self.logical_device.?.device.getSwapchainImagesKHR(swapchain, &image_count, swapchain_images.ptr) catch |e| {
-                logger.err("Failed to get swapchain images: {?}", .{e});
-                std.process.exit(1);
-            };
-            
-            if (res != vk.Result.success) {
-                logger.err("Failed to get swapchain images: {?}", .{res});
-                std.process.exit(1);
-            }
-
-            var image_views = std.ArrayList(vk.ImageView).init(self.context.?.arena.allocator());
-
-            for (swapchain_images) |image| 
-            {
-                const image_view_create_info = vk.ImageViewCreateInfo {
-                    .flags = .{},
-                    .image = image,
-                    .view_type = .@"2d",
-                    .format = vk.Format.r8g8b8a8_unorm,
-                    .components = .{ .r = .identity, .g = .identity, .b = .identity, .a = .identity },
-                    .subresource_range = .{
-                        .aspect_mask = .{ .color_bit = true },
-                        .base_mip_level = 0,
-                        .level_count = 1,
-                        .base_array_layer = 0,
-                        .layer_count = 1,
-                    },
-                };
-
-                const image_view = self.logical_device.?.device.createImageView(&image_view_create_info, null) catch |e| {
-                    logger.err("Failed to create image view: {?}", .{e});
-                    std.process.exit(1);
-                };
-
-                image_views.append(image_view) catch |e| {
-                    logger.err("Failed to append image view: {?}", .{e});
-                    std.process.exit(1);
-                };
-            }
-
-            var image_arr = std.ArrayList(vk.Image).init(self.context.?.arena.allocator());
-            image_arr.appendSlice(swapchain_images) catch unreachable;
+            const get_image_res = self.logical_device.?.device.getSwapchainImagesKHR(swapchain, &image_count, null) catch unreachable;
 
             self.render_target = RenderTarget {
                 .surface = surface,
-                .images = image_arr,
-                .format = vk.Format.r8g8b8a8_unorm,
-                .extent = vk.Extent2D{ .width = 800, .height = 600 },
+                .images = get_image_res.?,
+                .format = surface_format.format,
+                .extent = extent,
                 .swapchain = swapchain,
-                .image_views = image_views,
+                .image_views = self.create_image_views(),
             };
             logger.debug("Target Created", .{});
         }
