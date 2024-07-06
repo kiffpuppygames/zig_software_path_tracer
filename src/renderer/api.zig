@@ -67,6 +67,7 @@ const api = vk.ApiInfo
         .destroyCommandPool = true,
         .destroySwapchainKHR = true,
         .destroyRenderPass = true,
+        .destroyImage = true,
     }
 };
 

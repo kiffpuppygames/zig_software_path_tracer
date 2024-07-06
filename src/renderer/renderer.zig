@@ -1,11 +1,45 @@
 const std = @import("std");
+const builtin = @import("builtin");
 
 const glfw = @import("mach-glfw");
 const vk = @import("vulkan");
 
+pub const api = @import("api.zig");
 pub const renderer_context = @import("renderer_context.zig");
 pub const logical_device = @import("logical_device.zig");
 pub const render_target = @import("render_target.zig");
+pub const render_pass = @import("render_pass.zig");
+pub const pipeline = @import("pipeline.zig");
+
+pub const VALIDATION_LAYERS = [_][*:0]const u8{"VK_LAYER_KHRONOS_validation"};
+pub const DEVICE_EXTENSIONS = [_][*:0]const u8{vk.extensions.khr_swapchain.name};
+
+pub const ENABLE_VALIDATION_LAYERS: bool = switch (builtin.mode) {
+    .Debug, .ReleaseSafe => true,
+    else => false,
+};
+
+pub const VulkanEntryPoint = vk.BaseWrapper(api.API_DEFINITION);
+pub const InstanceDispatch = vk.InstanceWrapper(api.API_DEFINITION);
+
+pub const Instance = vk.InstanceProxy(api.API_DEFINITION);
+
+pub const DeviceDispatch = vk.DeviceWrapper(api.API_DEFINITION);
+pub const Device = vk.DeviceProxy(api.API_DEFINITION);
+
+pub const QueueType = enum(u32) 
+{
+    Graphics = 0,
+    Present = 1,
+};
+
+pub const Queue = struct
+{
+    queue_type: QueueType = undefined,
+    vk_queue: vk.Queue = .null_handle,
+    index: u8 = 0,
+    queue_priority: f32 = 1.0, 
+};
 
 pub const Window = struct 
 {
@@ -13,61 +47,16 @@ pub const Window = struct
     surface: vk.SurfaceKHR = .null_handle,
 };
 
-const QueueFamilyIndices = struct 
+pub const PhysicalDevice = struct
 {
+    vk_physical_device: vk.PhysicalDevice = .null_handle,
     graphics_family: ?u32 = null,
     present_family: ?u32 = null,
+    capabilities: vk.SurfaceCapabilitiesKHR = undefined,
+    formats: []vk.SurfaceFormatKHR = undefined,
+    present_modes: []vk.PresentModeKHR = undefined,
 
-    pub fn is_complete(self: *const QueueFamilyIndices) bool {
+    pub fn is_complete(self: *const PhysicalDevice) bool {
         return self.graphics_family != null and self.present_family != null;
     }
 };
-
-pub const SwapChainSupportDetails = struct 
-{
-    capabilities: vk.SurfaceCapabilitiesKHR = undefined,
-    formats: []vk.SurfaceFormatKHR = undefined,
-    present_modes: []vk.PresentModeKHR = undefined
-};
-
-pub fn find_queue_families(instance: *renderer_context.Instance, allocator: *std.mem.Allocator, device: vk.PhysicalDevice, surface: vk.SurfaceKHR) !QueueFamilyIndices 
-{
-    var indices: QueueFamilyIndices = .{};
-
-    var queue_family_count: u32 = 0;
-    instance.getPhysicalDeviceQueueFamilyProperties(device, &queue_family_count, null);
-
-    const queue_families = try allocator.alloc(vk.QueueFamilyProperties, queue_family_count);
-    defer allocator.free(queue_families);
-    instance.getPhysicalDeviceQueueFamilyProperties(device, &queue_family_count, queue_families.ptr);
-
-    for (queue_families, 0..) |queue_family, i| 
-    {
-        if (indices.graphics_family == null and queue_family.queue_flags.graphics_bit) 
-        {
-            indices.graphics_family = @intCast(i);
-        } 
-        else if (indices.present_family == null and (try instance.getPhysicalDeviceSurfaceSupportKHR(device, @intCast(i), surface)) == vk.TRUE) 
-        {
-            indices.present_family = @intCast(i);
-        }
-
-        if (indices.is_complete()) {
-            break;
-        }
-    }
-
-    return indices;
-}
-
-pub fn query_swapchain_support(instance: *renderer_context.Instance, allocator: *std.mem.Allocator, device: vk.PhysicalDevice, surface: vk.SurfaceKHR) !SwapChainSupportDetails 
-{
-    const details = SwapChainSupportDetails 
-    { 
-        .capabilities = try instance.getPhysicalDeviceSurfaceCapabilitiesKHR(device, surface),
-        .formats = try instance.getPhysicalDeviceSurfaceFormatsAllocKHR(device, surface, allocator.*),
-        .present_modes = try instance.getPhysicalDeviceSurfacePresentModesAllocKHR(device, surface, allocator.*),
-    };
-
-    return details;
-}

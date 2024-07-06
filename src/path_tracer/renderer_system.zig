@@ -380,23 +380,6 @@ pub const Renderer = struct {
         }
     }
 
-    fn query_swapchain_support(self: *Renderer, device: vk.PhysicalDevice, surface: vk.SurfaceKHR) SwapChainSupportDetails {
-        var details: SwapChainSupportDetails = SwapChainSupportDetails{};
-
-        details.capabilities = self.context.?.instance.getPhysicalDeviceSurfaceCapabilitiesKHR(device, surface) catch unreachable;
-
-        var count: u32 = 0;
-        _ = self.context.?.instance.getPhysicalDeviceSurfaceFormatsKHR(device, surface, &count, null) catch unreachable;
-        const formats: ?[]vk.SurfaceFormatKHR = self.context.?.arena.allocator().alloc(vk.SurfaceFormatKHR, count) catch unreachable;
-        _ = self.context.?.instance.getPhysicalDeviceSurfaceFormatsKHR(device, surface, &count, formats.?.ptr) catch unreachable;
-        details.formats = formats.?;
-
-        const present_mode_result = self.context.?.instance.getPhysicalDeviceSurfacePresentModesKHR(device) catch unreachable;
-        details.present_modes = present_mode_result.?;
-
-        return details;
-    }
-
     fn create_image_views(self: *Renderer) []vk.ImageView {
         var swap_chain_image_views = try self.context.?.arena.allocator().alloc(vk.ImageView, self.swap_chain_images.?.len);
 

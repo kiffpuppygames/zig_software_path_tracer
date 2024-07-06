@@ -58,7 +58,7 @@ pub const WindowSystem = struct {
 };
 
 fn error_callback(error_code: glfw.ErrorCode, description: [:0]const u8) void {
-    std.log.err("glfw: {}: {s}\n", .{ error_code, description });
+    logger.err("glfw: {}: {s}\n", .{ error_code, description });
 }
 
 pub fn glfw_init() void {
