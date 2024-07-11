@@ -2,21 +2,18 @@ const vk = @import("vulkan");
 
 pub const API_DEFINITION: []const vk.ApiInfo = &.{api};
 
-const api = vk.ApiInfo
-{
-    .base_commands = 
-    .{
+const api = vk.ApiInfo{ 
+    .base_commands = .{
         .createInstance = true,
         .getInstanceProcAddr = true,
-        .enumerateInstanceLayerProperties = true,        
-    },
-    .instance_commands = 
-    .{
+        .enumerateInstanceLayerProperties = true,
+    }, 
+    .instance_commands = .{
         .destroyInstance = true,
         .createDebugUtilsMessengerEXT = true,
         .getPhysicalDeviceSurfaceSupportKHR = true,
         .getPhysicalDeviceQueueFamilyProperties = true,
-        .enumerateDeviceExtensionProperties = true, 
+        .enumerateDeviceExtensionProperties = true,
         .enumeratePhysicalDevices = true,
         .getPhysicalDeviceSurfaceCapabilitiesKHR = true,
         .getPhysicalDeviceSurfaceFormatsKHR = true,
@@ -25,9 +22,10 @@ const api = vk.ApiInfo
         .getDeviceProcAddr = true,
         .destroySurfaceKHR = true,
         .destroyDebugUtilsMessengerEXT = true,
-    },
-    .device_commands = 
-    .{
+        .getPhysicalDeviceMemoryProperties = true,
+        .getPhysicalDeviceProperties = true
+    }, 
+    .device_commands = .{
         .getDeviceQueue = true,
         .createImageView = true,
         .createSwapchainKHR = true,
@@ -55,19 +53,36 @@ const api = vk.ApiInfo
         .cmdDraw = true,
         .cmdBeginRenderPass = true,
         .cmdEndRenderPass = true,
-        .queuePresentKHR = true,   
+        .queuePresentKHR = true,
         .deviceWaitIdle = true,
         .destroySemaphore = true,
         .destroyFence = true,
         .destroyImageView = true,
         .destroyFramebuffer = true,
         .destroyPipeline = true,
-        .destroyPipelineLayout = true,  
+        .destroyPipelineLayout = true,
         .destroyDevice = true,
         .destroyCommandPool = true,
         .destroySwapchainKHR = true,
         .destroyRenderPass = true,
         .destroyImage = true,
-    }
+        .allocateMemory = true,
+        .mapMemory = true,
+        .getBufferMemoryRequirements = true,
+        .createBuffer = true,
+        .createDescriptorSetLayout = true,
+        .createDescriptorPool = true,
+        .allocateDescriptorSets = true,
+        .updateDescriptorSets = true,
+        .cmdBindDescriptorSets = true,
+        .bindBufferMemory = true,
+        .cmdCopyBuffer2 = true,
+        .freeMemory = true,
+        .destroyBuffer = true,
+        .destroyDescriptorSetLayout = true,
+        .destroyDescriptorPool = true,
+        .unmapMemory = true,
+        .queueWaitIdle = true,
+        .freeCommandBuffers = true,
+    } 
 };
-

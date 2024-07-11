@@ -4,18 +4,19 @@ const vk = @import("vulkan");
 
 const api = @import("api.zig");
 const renderer = @import("renderer.zig");
+const logger = @import("../common/common.zig").logger;
 
 pub const LogicalDevice = struct 
 {
     vk_device: renderer.Device = undefined,
     physical_device: renderer.PhysicalDevice = undefined,
-    queues: std.AutoArrayHashMap(renderer.QueueType, renderer.Queue) = undefined,
+    graphics_queue: renderer.Queue = undefined,
 
     _vkd: *renderer.DeviceDispatch = undefined,
 
     pub fn create_logical_device(
-        ctx: *renderer.renderer_context.RendererContext, 
-        allocator: *std.mem.Allocator, 
+        ctx: *const renderer.renderer_context.RendererContext, 
+        allocator: *const std.mem.Allocator, 
         physical_device: renderer.PhysicalDevice
     ) !LogicalDevice 
     {
@@ -36,6 +37,15 @@ pub const LogicalDevice = struct
             },
         };
 
+        if (renderer.ENABLE_VALIDATION_LAYERS)
+        {
+            logger.debug("Device Extensions:", .{});
+            for (renderer.DEVICE_EXTENSIONS) |ext| 
+            {
+                logger.debug("\t{?s}", .{ext});    
+            }
+        }
+
         var create_info = vk.DeviceCreateInfo 
         {
             .flags = .{},
@@ -48,29 +58,18 @@ pub const LogicalDevice = struct
             .p_enabled_features = null,
         };
 
-        if (renderer.ENABLE_VALIDATION_LAYERS) 
-        {
-            create_info.enabled_layer_count = renderer.VALIDATION_LAYERS.len;
-            create_info.pp_enabled_layer_names = &renderer.VALIDATION_LAYERS;
-        }
-
         const _device = ctx.instance.createDevice(physical_device.vk_physical_device, &create_info, null) catch unreachable;
         const vkd = allocator.create(renderer.DeviceDispatch) catch unreachable;
         vkd.* = renderer.DeviceDispatch.load(_device, ctx.instance.wrapper.dispatch.vkGetDeviceProcAddr) catch unreachable;
         const device = renderer.Device.init(_device, vkd);
 
         const graphics_queue = device.getDeviceQueue(physical_device.graphics_family.?, 0);
-        const present_queue = device.getDeviceQueue(physical_device.present_family.?, 0);
-
-        var queues = std.AutoArrayHashMap(renderer.QueueType, renderer.Queue).init(allocator.*);
-        try queues.put(renderer.QueueType.Graphics, renderer.Queue{ .queue_type = renderer.QueueType.Graphics, .vk_queue = graphics_queue, .index = 0, .queue_priority = 1.0 });
-        try queues.put(renderer.QueueType.Present, renderer.Queue{ .queue_type = renderer.QueueType.Present, .vk_queue = present_queue, .index = 0, .queue_priority = 1.0 });
-
+        
         return LogicalDevice 
         {
             .vk_device = device,
             .physical_device = physical_device,
-            .queues = queues,
+            .graphics_queue = renderer.Queue{ .queue_type = renderer.QueueType.Graphics, .vk_queue = graphics_queue, .index = 0, .queue_priority = 1.0 },
             ._vkd = vkd,
         };
     }
@@ -79,9 +78,8 @@ pub const LogicalDevice = struct
     {
         allocator.free(self.physical_device.formats);
         allocator.free(self.physical_device.present_modes);
-        self.queues.deinit();
 
-        self.vk_device.destroyDevice(null);
+        self.vk_device.destroyDevice(null);     
         allocator.destroy(self._vkd);
     }
 };

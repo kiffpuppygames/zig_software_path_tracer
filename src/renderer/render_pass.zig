@@ -10,7 +10,7 @@ pub const RenderPass = struct
     vk_render_pass: vk.RenderPass = .null_handle,
     framebuffers: []vk.Framebuffer = undefined,    
 
-    pub fn create_render_pass(allocator: *std.mem.Allocator, target: *renderer.render_target.RenderTarget, vk_device: *renderer.Device) !RenderPass
+    pub fn create_render_pass(allocator: *const std.mem.Allocator, target: *const renderer.render_target.RenderTarget, vk_device: *const renderer.Device) !RenderPass
     {
         const color_attachment = [_]vk.AttachmentDescription{.{
             .flags = .{},

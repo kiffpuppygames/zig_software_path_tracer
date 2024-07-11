@@ -17,11 +17,11 @@ pub const Pipeline = struct
     pub fn create_pipeline(allocator: *std.mem.Allocator, logical_device: *renderer.logical_device.LogicalDevice, render_pass: *renderer.render_pass.RenderPass) !Pipeline
     {
         const vert_shader_code align(4) = @embedFile("../shaders/vert.spv").*;
-        const vert_shader_module: vk.ShaderModule = create_shader_module(&logical_device.vk_device, &vert_shader_code);
+        const vert_shader_module: vk.ShaderModule = renderer.create_shader_module(&logical_device.vk_device, &vert_shader_code);
         defer logical_device.vk_device.destroyShaderModule( vert_shader_module, null);
 
         const frag_shader_code align(4) = @embedFile("../shaders/frag.spv").*;
-        const frag_shader_module: vk.ShaderModule = create_shader_module(&logical_device.vk_device, &frag_shader_code);
+        const frag_shader_module: vk.ShaderModule = renderer.create_shader_module(&logical_device.vk_device, &frag_shader_code);
         defer logical_device.vk_device.destroyShaderModule( frag_shader_module, null);
 
         const shader_stages = [_]vk.PipelineShaderStageCreateInfo{
@@ -226,15 +226,7 @@ pub const Pipeline = struct
         try vk_device.endCommandBuffer(self.command_buffer);
     }
 
-    fn create_shader_module(vk_device: *renderer.Device,  code: []align(@alignOf(u32)) const u8) vk.ShaderModule 
-    {        
-        const vert_mod_create_info = vk.ShaderModuleCreateInfo {
-            .code_size = code.len,
-            .p_code = std.mem.bytesAsSlice(u32, code).ptr,
-        };
-        const vert_shader_mod: vk.ShaderModule = vk_device.createShaderModule( &vert_mod_create_info, null) catch unreachable;
-        return vert_shader_mod;
-    }
+    
 
     pub fn deinit(self: *Pipeline, vk_device: *renderer.Device) void
     {

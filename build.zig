@@ -15,14 +15,10 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    const shader_comp = vkgen.ShaderCompileStep.create(
-        b,
-        &[_][]const u8{"glslc", "--target-env=vulkan1.2"},
-        "-o",
-    );
-    shader_comp.add("shader_frag", "src/shaders/simple.frag", .{});
-    shader_comp.add("shader_vert", "src/shaders/simple.vert", .{});
-    
+    const zigimg_dependency = b.dependency("zigimg", .{
+        .target = target,
+        .optimize = optimize,
+    });
 
     const lib = b.addStaticLibrary(.{
         .name = "path_tracer",
@@ -45,7 +41,7 @@ pub fn build(b: *std.Build) void {
     });
     exe.linkLibC();
     
-    exe.root_module.addImport("shaders", shader_comp.getModule());
+    exe.root_module.addImport("zigimg", zigimg_dependency.module("zigimg"));
     exe.root_module.addImport("mach-glfw", glfw_dep.module("mach-glfw"));
     exe.root_module.addImport("vulkan", vkzig_bindings);
 

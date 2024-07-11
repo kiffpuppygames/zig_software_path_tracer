@@ -14,10 +14,11 @@ pub const RenderTarget = struct
     format: vk.Format,
     extent: vk.Extent2D,
 
-    pub fn create_render_target(allocator: *std.mem.Allocator, logical_device: *renderer.logical_device.LogicalDevice, window: renderer.Window) !RenderTarget
+    pub fn create_render_target(allocator: *const std.mem.Allocator, logical_device: *const renderer.logical_device.LogicalDevice, window: renderer.Window) !RenderTarget
     {
         var surface_format: vk.SurfaceFormatKHR = logical_device.physical_device.formats[0];
-        for (logical_device.physical_device.formats) |available_format| {
+        for (logical_device.physical_device.formats) |available_format| 
+        {
             if (available_format.format == .r8g8b8a8_srgb and available_format.color_space == .srgb_nonlinear_khr) 
             {
                 surface_format = available_format;
@@ -48,17 +49,9 @@ pub const RenderTarget = struct
             image_count = logical_device.physical_device.capabilities.max_image_count;
         }
 
-        const indices: []u32 = try allocator.alloc(u32, logical_device.queues.count());
-        defer allocator.free(indices);
-        for (logical_device.queues.values(), 0..) |queue, i| 
-        {
-            indices[i] = queue.index;
-        }
-
-        const sharing_mode: vk.SharingMode = if (logical_device.queues.get(.Graphics).?.index != logical_device.queues.get(.Present).?.index)
-            .concurrent
-        else
-            .exclusive;
+        const indices = [_]u32 { logical_device.graphics_queue.index };
+        
+        const sharing_mode: vk.SharingMode = .exclusive;
 
         const swapchain = try logical_device.vk_device.createSwapchainKHR(&.{
             .flags = .{},
@@ -71,7 +64,7 @@ pub const RenderTarget = struct
             .image_usage = .{ .color_attachment_bit = true },
             .image_sharing_mode = sharing_mode,
             .queue_family_index_count = @intCast(indices.len),
-            .p_queue_family_indices = indices.ptr,
+            .p_queue_family_indices = &indices,
             .pre_transform = logical_device.physical_device.capabilities.current_transform,
             .composite_alpha = .{ .opaque_bit_khr = true },
             .present_mode = present_mode,
@@ -112,7 +105,7 @@ pub const RenderTarget = struct
         };
     }
 
-    pub fn deinit(self: *RenderTarget, allocator: *std.mem.Allocator, instance: *renderer.Instance, vk_device: *renderer.Device) void 
+    pub fn deinit(self: *const RenderTarget, allocator: *const std.mem.Allocator, instance: *const renderer.Instance, vk_device: *const renderer.Device) void 
     {
         for (self.image_views) |image_view| {
             vk_device.destroyImageView(image_view, null);
