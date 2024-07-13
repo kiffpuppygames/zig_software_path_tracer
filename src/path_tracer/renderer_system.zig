@@ -184,8 +184,6 @@ pub const RenderPassGroup = struct {
                 .render_pass = render_pass,
                 .attachment_count = 1,
                 .p_attachments = &attachments,
-                .width = 800,
-                .height = 600,
                 .layers = 1,
             };
 

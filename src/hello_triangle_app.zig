@@ -56,9 +56,6 @@ const vk = @import("vulkan");
 const logger = @import("common/logger.zig");
 const renderer = @import("renderer/renderer.zig");
 
-const WIDTH: u32 = 800;
-const HEIGHT: u32 = 600;
-
 const MAX_FRAMES_IN_FLIGHT: u32 = 2;
 
 const InitError = error{
@@ -87,7 +84,7 @@ pub const HelloTriangleApplication = struct {
 
         app.renderer_context = try renderer.renderer_context.RendererContext.create_renderer_context(allocator);
 
-        const glfw_window = glfw.Window.create(WIDTH, HEIGHT, "Vulkan", null, null, .{ .client_api = .no_api, .resizable = false, }).?;        
+        const glfw_window = glfw.Window.create(800, 600, "Vulkan", null, null, .{ .client_api = .no_api, .resizable = false, }).?;        
         var surface: vk.SurfaceKHR = .null_handle;
         if (glfw.createWindowSurface(app.renderer_context.instance.handle, glfw_window, null, &surface) != @intFromEnum(vk.Result.success)) 
         {

@@ -12,7 +12,8 @@ pub const RendererContext = struct {
     _vki: *renderer.InstanceDispatch = undefined,
     _debug_messenger: vk.DebugUtilsMessengerEXT = .null_handle,
 
-    pub fn create_renderer_context(allocator: *const std.mem.Allocator) !RendererContext {
+    pub fn create_renderer_context(allocator: *const std.mem.Allocator) !RendererContext 
+    {
         //const vk_proc: *const fn (instance: vk.Instance, procname: [*:0]const u8) callconv(.C) vk.PfnVoidFunction = @ptrCast(&glfw.getInstanceProcAddress);
         const entry_point = try renderer.VulkanEntryPoint.load(@as(vk.PfnGetInstanceProcAddr, @ptrCast(&glfw.getInstanceProcAddress)));
 

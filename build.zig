@@ -19,6 +19,9 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    
+    const zmath = b.dependency("zmath", .{});
+    
 
     const lib = b.addStaticLibrary(.{
         .name = "path_tracer",
@@ -41,6 +44,7 @@ pub fn build(b: *std.Build) void {
     });
     exe.linkLibC();
     
+    exe.root_module.addImport("zmath", zmath.module("root"));
     exe.root_module.addImport("zigimg", zigimg_dependency.module("zigimg"));
     exe.root_module.addImport("mach-glfw", glfw_dep.module("mach-glfw"));
     exe.root_module.addImport("vulkan", vkzig_bindings);

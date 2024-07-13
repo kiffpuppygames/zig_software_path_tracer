@@ -1,24 +1,37 @@
 #version 460
 
-struct Pixel 
+struct Colour 
 {
     float r;
     float g;
     float b;
+    float a;
 };
 
 layout(set = 0, binding = 0, std430) buffer PixelBuffer {
-    Pixel pixels[];
+    Colour colours[];
 } pixelBuffer;
-    
+   
+// Define a struct for dimensions
+struct Dimensions 
+{
+    int width;
+    int height;
+};
+
+// Declare a uniform buffer object for Dimensions
+layout(set = 0, binding = 1) uniform DimBuffer 
+{
+    Dimensions dims;
+} dimBuffer;
 
 layout(location = 0) in vec2 fragTexCoord;
 layout(location = 0) out vec4 outColor;
 
 void main() 
 {
-    int width = 800; // Assuming a fixed width of 800 pixels
-    int height = 600; // Assuming a fixed height of 600 pixels
+    int width = dimBuffer.dims.width;
+    int height = dimBuffer.dims.height;
 
     // Scale fragTexCoord to the resolution
     int x = int(fragTexCoord.x * float(width));
@@ -26,13 +39,7 @@ void main()
 
     // Calculate the corresponding index in the 1D array
     int index = y * width + x;
-
-    if (pixelBuffer.pixels.length() <= 1) // If the pixel has not been written to yet, write to it
-    {
-        outColor = vec4(1.0, 0.0, 1.0, 1.0);
-    }
-    else
-    {
-        outColor = vec4(pixelBuffer.pixels[index].r, pixelBuffer.pixels[index].g, pixelBuffer.pixels[index].b, 1);
-    }
+    
+    outColor = vec4(pixelBuffer.colours[index].r, pixelBuffer.colours[index].g, pixelBuffer.colours[index].b, pixelBuffer.colours[index].a);
+    //outColor = vec4(fragTexCoord.x, fragTexCoord.y, 0, 1);
 }

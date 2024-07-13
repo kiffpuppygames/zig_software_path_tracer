@@ -6,7 +6,7 @@ const common = @import("common/common.zig");
 const logger = common.logger;
 
 const hello_triangle_app = @import("hello_triangle_app.zig");
-const cpu_pathtracer = @import("cpu_path_tracer.zig");
+const path_tracer_app = @import("path_tracer_app.zig");
 
 pub fn main() void 
 {   
@@ -17,7 +17,7 @@ pub fn main() void
 fn run_cpu_path_tracer() void 
 {
     logger.debug("App Start", .{});
-    var app = cpu_pathtracer.CPUPathTracer.init() catch |err| 
+    var app = path_tracer_app.PathTracerApp.init(1920, 16.0 / 9.0) catch |err| 
     {
         logger.err("application exited with error: {any}", .{err});
         return;

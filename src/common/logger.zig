@@ -68,3 +68,29 @@ fn write_log(level: *const [16:0]u8, comptime msg: []const u8, args: anytype) vo
 
     bw.flush() catch unreachable;
 }
+
+pub fn log_progress(comptime msg: []const u8, args: anytype) void 
+{
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+
+    const formatted_msg = std.fmt.allocPrint(arena.allocator(), msg, args) catch |e| 
+    {
+        std.debug.print("Error writing to stdout: {!}\n", .{e});
+        @panic("OOPS");
+    };
+
+    const final_msg = std.fmt.allocPrint(arena.allocator(), "\x1b[A\x1b[2K{s}", .{ formatted_msg }) catch |e| 
+    {
+        std.debug.print("Error writing to stdout: {!}\n", .{e});        
+        @panic("OOPS Again");
+    };
+
+    var bw = std.io.bufferedWriter(std.io.getStdOut().writer());
+
+    // Use std.debug.print or bw.writer().print to write the final message
+    bw.writer().print("{s}\n", .{final_msg}) catch |e| 
+    {
+        std.debug.print("Error writing to stdout: {!}\n", .{e});
+    };
+}
