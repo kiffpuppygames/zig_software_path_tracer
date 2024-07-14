@@ -22,8 +22,7 @@ pub const ViewPort = struct
     width: f32,
     height: f32,
     viewport_upper_left: zm.Vec,
-    pixel_size: zm.Vec,
-    ray_zero_target_point: zm.Vec,
+    pixel_size: zm.Vec
 };
 
 // pub const Point2D = struct {
@@ -252,7 +251,7 @@ pub const Image = struct
 {
     width: u32,
     height: u32,
-    pixels: std.ArrayList(zm.Vec),
+    pixels: []zm.Vec,
 
     pub fn mem_size(self: *const Image) u32
     {
@@ -263,7 +262,7 @@ pub const Image = struct
 pub const Ray = struct
 {
     origin: zm.Vec,
-    direction: zm.Vec,
+    direction: zm.Vec, // must be normaized/unit vector
 
     pub fn at(self: *Ray, t: f64) zm.Vec
     {
@@ -271,46 +270,76 @@ pub const Ray = struct
     }
 };
 
+// Assuming you have defined these somewhere
+pub const Light = struct 
+{
+    direction: zm.Vec,
+    color: zm.Vec, // RGB color
+    intensity: f32,
+};
+
 pub const Cube = struct
 {    
     colour: zm.Vec,
-    position: zm.Vec,
+    world_position: zm.Vec,
+    local_position: zm.Vec = zm.Vec { 0, 0, 0, 1 },
     size: f32, // length of one side
     half_size: f32,
-    rotation: zm.Quat,    
-    rotation_matrix: zm.Mat,
+    rotation: zm.Quat, //changes on rotate    
+    rotation_matrix: zm.Mat,  //changes on rotate    
+    inverse_rotation_matrix: zm.Mat,  //changes on rotate    
     forward: zm.Vec,
-    verts: [8]zm.Vec,    
-    world_verts: [8]zm.Vec,
+    local_verts: [8]zm.Vec,     
+    world_verts: [8]zm.Vec,  //changes on rotate    
     indices: [36]u16,
-    surface_normals: [6]zm.Vec,
-    world_surface_normals: [6]zm.Vec,
-    vertex_normals: [8]zm.Vec,
-    world_vertex_normals: [8]zm.Vec,
+    local_surface_normals: [6]zm.Vec,
+    world_surface_normals: [6]zm.Vec,  //changes on rotate    
+    local_vertex_normals: [8]zm.Vec,
+    world_vertex_normals: [8]zm.Vec,  //changes on rotate    
+    min_vert: zm.Vec, 
+    max_vert: zm.Vec,    
 
-    pub fn new(position: zm.Vec, size: f32, colour: zm.Vec, euler_rotation: zm.Vec, forward: zm.Vec) Cube
+    pub fn new(world_position: zm.Vec, size: f32, colour: zm.Vec, euler_rotation: zm.Vec, forward: zm.Vec) Cube
     {
-        const rotation = zm.quatFromRollPitchYawV(euler_rotation);
+        const rotation = zm.qidentity();
         const rotation_matrix = zm.quatToMat(rotation);
-        const verts = calculate_verts(size);
-        const surface_normals = calculate_surface_normals();
-        const vertex_normals = calculate_vertex_normals(verts);
+        const local_verts = calculate_verts(size);
+        const local_surface_normals = calculate_surface_normals();
+        const local_vertex_normals = calculate_vertex_normals(local_verts);
 
-        return Cube { 
-            .position = position, 
+        // Initialize cubeMin and cubeMax with the first vertex
+        var min_vert = local_verts[0]; // vertex with smallest values
+        var max_vert = local_verts[0]; // vertex with largest values
+
+        // Find the minimum and maximum x, y, and z coordinates
+        for (0..local_verts.len) |i| {
+            min_vert = zm.min(min_vert, local_verts[i]);
+            max_vert = zm.max(max_vert, local_verts[i]);
+        }
+
+        var self = Cube 
+        { 
+            .world_position = world_position, 
             .size = size, .colour = colour, 
             .half_size = size / 2.0,
             .rotation = rotation,
             .rotation_matrix = rotation_matrix,
+            .inverse_rotation_matrix = zm.inverse(rotation_matrix),
             .forward = forward,
-            .verts = verts,
-            .world_verts = calculate_world_verts(rotation_matrix, position, verts),            
+            .local_verts = local_verts,
+            .world_verts = calculate_world_verts(rotation_matrix, world_position, local_verts),            
             .indices = calculate_indices(),
-            .surface_normals = surface_normals,
-            .world_surface_normals = calculate_world_surface_normals(rotation_matrix, surface_normals),
-            .vertex_normals = vertex_normals,
-            .world_vertex_normals = calculate_world_vertex_normals(rotation_matrix, vertex_normals)
+            .local_surface_normals = local_surface_normals,
+            .world_surface_normals = calculate_world_surface_normals(rotation_matrix, local_surface_normals),
+            .local_vertex_normals = local_vertex_normals,
+            .world_vertex_normals = calculate_world_vertex_normals(rotation_matrix, local_vertex_normals),
+            .min_vert = min_vert,
+            .max_vert = max_vert
         };
+
+        self.rotate(euler_rotation);
+
+        return self;
     }
 
     pub fn get_euler_rotation(self: *const Cube) zm.Vec
@@ -322,10 +351,27 @@ pub const Cube = struct
         return zm.Vec { .x = vec_arr[1], .y = vec_arr[0], .z = vec_arr[2] };
     }
 
-    pub fn rotate(self: *Cube, euler_angles_XYZ: zm.Vec) Cube
+    pub fn rotate(self: *Cube, euler_angles_XYZ: zm.Vec) void
     {
-        const rot_delta = zm.Quat.quatFromRollPitchYaw(euler_angles_XYZ.y, euler_angles_XYZ.x, euler_angles_XYZ.z);        
-        self.rotation = zm.mul(self.rotation, rot_delta);
+        // rotation: zm.Quat changes on rotate    
+        // rotation_matrix: zm.Mat changes on rotate    
+        // inverse_rotation_matrix: zm.Mat changes on rotate   
+        // world_verts: [8]zm.Vec changes on rotate
+        // world_surface_normals: [6]zm.Vec, changes on rotate    
+        // world_vertex_normals: [8]zm.Vec,  changes on rotate        
+
+        //const rot_delta = zm.quatFromRollPitchYaw(euler_angles_XYZ[0], euler_angles_XYZ[1], euler_angles_XYZ[2]);        
+        //self.rotation = zm.rotate(self.rotation, zm.Vec { euler_angles_XYZ[1], euler_angles_XYZ[0], euler_angles_XYZ[2], 1});
+        //self.rotation_matrix = zm.quatToMat(self.rotation);
+        
+        const rotation_delta = zm.matFromRollPitchYawV(euler_angles_XYZ);
+        self.rotation_matrix = zm.mul(rotation_delta, self.rotation_matrix);
+        self.rotation = zm.matToQuat(self.rotation_matrix);
+        self.inverse_rotation_matrix = zm.inverse(self.rotation_matrix);
+
+        self.world_verts = calculate_world_verts(self.rotation_matrix, self.world_position, self.local_verts);
+        self.world_surface_normals = calculate_world_surface_normals(self.inverse_rotation_matrix, self.local_surface_normals);
+        self.world_vertex_normals = calculate_world_vertex_normals(self.rotation_matrix, self.local_vertex_normals);
     }
 
     fn calculate_verts(size: f32) [8]zm.Vec

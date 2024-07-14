@@ -11,6 +11,7 @@ const image_pipeline = @import("renderer/image_pipeline.zig");
 const software_ray_tracer = @import("ray_tracing_in_a_weekend/software_ray_tracer.zig");
 
 const MAX_FRAMES_IN_FLIGHT: u32 = 2;
+const INTERSECTION_THRESHOLD: f32 = 1e-8;
 
 const InitError = error{
     CreateWindowSurfaceFailed,
@@ -85,15 +86,47 @@ pub const PathTracerApp = struct {
     fn mainLoop(self: *PathTracerApp) !void 
     {
         var frame_counter: u32 = 0;
+        const camera_origin = zm.Vec { 0, 0, 0, 1 };              
+        var pathtracer = try software_ray_tracer.SoftwarePathTracer.init(
+            self.width, 
+            self.height, 
+            self.aspect_ratio, 
+            1.0, 
+            camera_origin,
+            INTERSECTION_THRESHOLD);
+       
+        var frame = software_ray_tracer.Image 
+        { 
+            .width = @as(u32, self.width), 
+            .height = @as(u32, self.height), 
+            .pixels = try self.gpa.allocator().alloc(zm.Vec, self.width * self.height)
+        };
 
-        var pathtracer = software_ray_tracer.SoftwarePathTracer.init(self.width, self.height, self.aspect_ratio, 1.0, zm.Vec { 0, 0, 0, 1 });
-        const frame = try pathtracer.generate_frame(&self.gpa.allocator());
-        defer frame.pixels.deinit(); 
+        defer self.gpa.allocator().free(frame.pixels); 
 
         while (!self.render_target.window.glfw_window.shouldClose()) {
             glfw.pollEvents();
+
+            var timer = try std.time.Timer.start();
+        
+            pathtracer.cube.rotate(zm.Vec{ 0, 0.05, 0, 0});
+            try software_ray_tracer.SoftwarePathTracer.generate_frame(
+                &frame, 
+                camera_origin, 
+                pathtracer.initial_ray_directions.ptr,
+                &pathtracer.cube,
+                &pathtracer.directinonal_light,
+                &pathtracer.ground_col,
+                &pathtracer.sky_col,
+                INTERSECTION_THRESHOLD
+            );
+
             try self.drawFrame(frame, frame_counter);
             frame_counter += 1;
+
+            const delta_time_nano = timer.read();
+            timer.reset();
+            logger.info("Frame took {d} ms to render", . { delta_time_nano / 1000000 });            
         }
 
         _ = try self.logical_device.vk_device.deviceWaitIdle();

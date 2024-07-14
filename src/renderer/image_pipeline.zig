@@ -83,11 +83,11 @@ const PixelBuffer = struct
 
     pub fn fill_src_buffer(self: *PixelBuffer, frame: software_ray_tracer.Image) void
     {
-        const colours = frame.pixels.items;
+        //const colours = frame.pixels.items;
 
-        for (0..frame.pixels.items.len) |i| 
+        for (0..(frame.width * frame.height)) |i| 
         {
-            self.src_data_ptr[i] = colours[i];       
+            self.src_data_ptr[i] = frame.pixels[i];       
         }
     }
 
